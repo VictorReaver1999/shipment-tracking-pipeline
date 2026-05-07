@@ -1,0 +1,45 @@
+version: 2
+
+sources:
+  - name: logistics
+    database: logistics
+    schema: public
+    tables:
+      - name: shipment_events
+        description: "Raw shipment lifecycle events ingested from Kafka"
+        columns:
+          - name: id
+            description: "Auto-incrementing primary key"
+            tests:
+              - unique
+              - not_null
+          - name: shipment_id
+            description: "Unique identifier per shipment (UUID)"
+            tests:
+              - not_null
+          - name: event_type
+            description: "Stage in the shipment lifecycle"
+            tests:
+              - not_null
+              - accepted_values:
+                  name: accepted_event_types
+                  arguments:
+                    values: ['order_created', 'picked_up', 'in_transit', 'out_for_delivery', 'delivered', 'failed']
+          - name: timestamp
+            description: "When the event occurred (UTC)"
+            tests:
+              - not_null
+          - name: location
+            description: "City where the event happened"
+          - name: carrier
+            description: "Logistics carrier"
+            tests:
+              - not_null
+          - name: region
+            description: "Geographic region"
+            tests:
+              - not_null
+          - name: ingested_at
+            description: "When the event was received by our pipeline"
+            tests:
+              - not_null

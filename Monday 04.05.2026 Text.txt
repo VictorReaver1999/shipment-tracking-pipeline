@@ -1,0 +1,59 @@
+Data Engineering Capstone Project: Phase 2
+
+The goal of Phase 2 was to close the loop on the pipeline. Phase 1 gave me Kafka running and a producer generating events. But events flowing through Kafka alone are useless. 
+Kafka is a transport layer, not storage. Events expire. I needed somewhere to actually persist them permanently so I could query and analyse them later. 
+That is what Phase 2 was about: getting those events out of Kafka and into PostgreSQL.
+
+First decision: PostgreSQL over anything else
+
+I could have used any database: MongoDB, MySQL, SQLite. I chose PostgreSQL for three reasons. It is the industry standard for analytical workloads. dbt, which I am using in Phase 3, 
+works extremely well with it. And it is what serious data engineering teams actually use. Every tool choice is justified. Nothing is here to pad a checklist.
+
+Infrastructure as config, not hardcoding
+
+Before writing a single line of Python, I set up proper credential management. PostgreSQL connection details, including database name, user, and password, live in a .env file that is 
+gitignored and never touches GitHub. A .env.example file sits in the repo instead, showing anyone using the project what variables they need without exposing real values. 
+This is standard practice in production teams, and I treated it that way from day one.
+
+The Docker Compose file reads from .env using ${VARIABLE} syntax. The Python consumer reads from it using python-dotenv. 
+Neither has a single hardcoded credential anywhere.
+
+The database schema and why it is designed the way it is
+
+The shipment_events table has two timestamp columns, and that is intentional:
+
+timestamp is when the event actually happened in the real world. A package was picked up at 14:00.
+
+ingested_at is when my system received and processed it. Maybe 14:03, maybe 14:45 if the consumer was down. This is auto-set to NOW() on insert.
+
+In a local environment running at full speed, these look almost identical, maybe 30 milliseconds apart. But in production over a real network with real failures, 
+that gap can be minutes or hours. Tracking both is non-negotiable in real pipelines because if I only had ingested_at, my delivery time calculations would be wrong.
+
+The consumer architecture
+
+The consumer is a persistent process. It runs indefinitely, blocking on Kafka and waiting for messages. The moment a new event arrives, it deserialises it from bytes back into a Python 
+dictionary and inserts it into PostgreSQL.
+
+A few deliberate decisions here:
+
+auto_offset_reset="earliest" means that when the consumer starts for the first time, it reads from the very beginning of the Kafka topic, not just new messages. 
+This guarantees no events are ever missed, even if the consumer was down while the producer was running.
+
+group_id is how Kafka tracks which messages this consumer group has already processed. If the consumer crashes and restarts, Kafka knows exactly where it left off and resumes from there. 
+Without a group_id, it would start over every time, causing duplicate inserts.
+
+I used parameterised queries with psycopg2’s %(field)s syntax, never f-strings or string concatenation for SQL. That is how SQL injection attacks happen. Parameterised queries hand 
+the values to the driver separately from the SQL itself, so they can never be interpreted as commands.
+
+A real debugging story
+
+I hit a port conflict that took some diagnosing. psycopg2 was throwing authentication errors even though the credentials were correct. The issue turned out to be a local PostgreSQL 
+installation on Windows running on port 5432, the same port as my Docker container. Python was connecting to the wrong PostgreSQL instance entirely.
+
+I identified it using netstat, found the conflicting process ID, stopped the local Windows PostgreSQL service, and the Docker container took over cleanly. In a production environment, 
+this would manifest as a misconfigured connection string or a firewall rule. The debugging approach is identical.
+
+End result
+
+A fully working streaming pipeline. The producer generates synthetic shipment events, Kafka transports them, and the consumer reads them and writes them to PostgreSQL. 
+I verified it by querying the database directly and seeing rows with correct UUIDs, consistent city and region pairs, sequential event types per shipment, and dual timestamps proving the ingestion layer is working correctly.

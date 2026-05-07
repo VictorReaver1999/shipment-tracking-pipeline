@@ -102,9 +102,13 @@ def main():
     # Infinite loop — blocks here waiting for new messages
     # Each iteration processes one event from Kafka
     for message in consumer:
-        event = message.value  # already a Python dict thanks to deserializer
-        insert_event(conn, event)
-        print(f"Inserted: {event}")
+        event = message.value
+        try:
+            insert_event(conn, event)
+            print(f"Inserted: {event}")
+        except Exception as e:
+            conn.rollback()  # reset the failed transaction
+            print(f"Skipped bad event: {e} | Event: {event}")
 
 if __name__ == "__main__":
     main()

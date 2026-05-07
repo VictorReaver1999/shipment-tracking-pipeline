@@ -1,0 +1,10 @@
+"Phase 1 was about getting the foundation working. Here's what I committed to in the proposal — repo, Docker, Kafka, producer. Here's the GitHub showing it's done."
+Then while the producer is running:
+
+"This is a Python script generating synthetic shipment events — order created, picked up, in transit, all the way to delivered. 
+Each event is a JSON message being sent to a Kafka topic called shipment-events in real time. Kafka is running locally in Docker in KRaft mode — no Zookeeper, which is the modern approach."
+
+Then one thing that shows you went beyond just copy-pasting:
+
+"I caught a data consistency issue during development — city and region were being assigned randomly and independently, so you could end up with Hamburg labelled as East region. 
+I fixed that with a city-to-region map so the data is always consistent."

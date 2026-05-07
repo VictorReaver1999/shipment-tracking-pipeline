@@ -1,0 +1,8 @@
+docker compose up -d
+docker exec -it kafka kafka-topics --create --topic shipment-events --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+
+In production, the producer would be replaced by a real event source like an actual warehouse management system, a package scanner API, or a logistics platform webhook. 
+Every time a real package gets scanned, picked up, or delivered, that system fires an event directly into Kafka.
+In our project we simulate that with the Python producer generating synthetic events. The rest of the pipeline — Kafka, consumer, PostgreSQL, dbt — is identical to production. 
+Only the data source changes.
+So the pipeline itself is production-ready. The producer is just a stand-in for a real logistics system.
