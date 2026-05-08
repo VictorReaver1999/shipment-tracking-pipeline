@@ -1,0 +1,33 @@
+powershell# PowerShell as Administrator — stop local PostgreSQL
+Stop-Service postgresql*
+bash# Git Bash — start everything up
+cd ~/Documents/shipment-tracking-pipeline
+source venv/Scripts/activate
+docker compose up -d
+Generate fresh data (two terminals):
+bash# Terminal 1 — run producer
+python producer/producer.py
+bash# Terminal 2 — run consumer
+python consumer/consumer.py
+Stop both with Ctrl+C after 20-30 shipments.
+The dbt demo:
+bash# Navigate to dbt project
+cd dbt/shipment_tracking_pipeline
+
+# Run all models
+dbt run
+
+# Run data quality tests
+dbt test
+Query the marts (the wow moment):
+bash# Delivery times
+docker exec -it postgres psql -U victor -d logistics -c "SELECT * FROM dbt_dev.mart_delivery_times LIMIT 5;"
+
+# Delay rates
+docker exec -it postgres psql -U victor -d logistics -c "SELECT * FROM dbt_dev.mart_delay_rates LIMIT 5;"
+
+# Bottlenecks
+docker exec -it postgres psql -U victor -d logistics -c "SELECT * FROM dbt_dev.mart_bottlenecks LIMIT 5;"
+After the presentation:
+bashcd ~/Documents/shipment-tracking-pipeline
+docker compose down

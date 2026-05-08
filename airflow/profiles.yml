@@ -1,0 +1,12 @@
+shipment_tracking_pipeline:
+  outputs:
+    dev:
+      type: postgres
+      host: postgres
+      port: 5432
+      dbname: logistics
+      user: victor
+      password: password
+      schema: dbt_dev
+      threads: 4
+  target: dev
