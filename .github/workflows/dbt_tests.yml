@@ -1,0 +1,110 @@
+# This workflow runs dbt tests automatically on every push to main
+# It proves that code changes haven't broken the data transformation layer
+name: dbt Tests
+
+# Triggers: run on every push or pull request targeting the main branch
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  dbt-test:
+    # GitHub provides a fresh Ubuntu virtual machine for each run
+    runs-on: ubuntu-latest
+
+    # Spin up a PostgreSQL container alongside the job
+    # This mimics our local Docker PostgreSQL setup
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: logistics
+          POSTGRES_USER: victor
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5432:5432
+        # Wait until PostgreSQL is healthy before running any steps
+        # Without this, steps might try to connect before the DB is ready
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      # Clone the repository onto the virtual machine
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Install Python 3.11 — same version as local development
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Install dbt with the PostgreSQL adapter
+      # Pin to same version as local and Airflow to avoid surprises
+      - name: Install dbt
+        run: pip install dbt-postgres==1.10.0
+
+      # Create the ~/.dbt directory for the profiles file
+      - name: Create dbt profiles directory
+        run: mkdir -p ~/.dbt
+
+      # Write the profiles.yml dynamically on the virtual machine
+      # We can't use the local file — this is a fresh machine with no config
+      # Note: host is localhost because PostgreSQL runs as a service on the same machine
+      - name: Write dbt profiles.yml
+        run: |
+          cat > ~/.dbt/profiles.yml << EOF
+          shipment_tracking_pipeline:
+            outputs:
+              dev:
+                type: postgres
+                host: localhost
+                port: 5432
+                dbname: logistics
+                user: victor
+                password: password
+                schema: dbt_dev
+                threads: 4
+            target: dev
+          EOF
+
+      # Create the shipment_events table and insert minimal test data
+      # The virtual machine has no data — we seed just enough for dbt to run
+      # In a real project this would use dbt seeds or a fixture file
+      - name: Seed database with test data
+        run: |
+          PGPASSWORD=password psql -h localhost -U victor -d logistics -c "
+          CREATE TABLE IF NOT EXISTS shipment_events (
+            id SERIAL PRIMARY KEY,
+            shipment_id UUID NOT NULL,
+            event_type VARCHAR(50) NOT NULL,
+            timestamp TIMESTAMPTZ NOT NULL,
+            location VARCHAR(100),
+            carrier VARCHAR(50),
+            region VARCHAR(50),
+            ingested_at TIMESTAMPTZ DEFAULT NOW()
+          );
+          INSERT INTO shipment_events (shipment_id, event_type, timestamp, location, carrier, region)
+          VALUES
+            ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'order_created', NOW() - INTERVAL '10 minutes', 'Hamburg', 'DHL', 'North'),
+            ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'picked_up', NOW() - INTERVAL '8 minutes', 'Hamburg', 'DHL', 'North'),
+            ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'in_transit', NOW() - INTERVAL '6 minutes', 'Hamburg', 'DHL', 'North'),
+            ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'delivered', NOW() - INTERVAL '2 minutes', 'Hamburg', 'DHL', 'North');
+          "
+
+      # Run all dbt models — staging and all three marts
+      # working-directory sets the folder so we don't need cd
+      - name: Run dbt
+        working-directory: dbt/shipment_tracking_pipeline
+        run: dbt run
+
+      # Run all dbt data quality tests
+      # Only runs if dbt run succeeded — GitHub Actions stops on first failure
+      - name: Run dbt tests
+        working-directory: dbt/shipment_tracking_pipeline
+        run: dbt test
