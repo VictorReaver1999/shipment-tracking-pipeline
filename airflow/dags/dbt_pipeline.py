@@ -24,13 +24,13 @@ with DAG(
     # Task 1: run dbt models
     dbt_run = BashOperator(
         task_id="dbt_run",
-        bash_command="cd /opt/airflow/dbt/shipment_tracking_pipeline && dbt run --profiles-dir /opt/airflow/dbt/shipment_tracking_pipeline",
+        bash_command="cd /opt/airflow/dbt/shipment_tracking_pipeline && dbt run --profiles-dir /home/airflow/.dbt",
     )
-
-    # Task 2: run dbt tests — only runs if dbt_run succeeds
+    
+     # Task 2: run dbt tests — only runs if dbt_run succeeds
     dbt_test = BashOperator(
         task_id="dbt_test",
-        bash_command="cd /opt/airflow/dbt/shipment_tracking_pipeline && dbt test --profiles-dir /opt/airflow/dbt/shipment_tracking_pipeline",
+        bash_command="cd /opt/airflow/dbt/shipment_tracking_pipeline && dbt test --profiles-dir /home/airflow/.dbt",
     )
 
     # Define dependency: dbt_run must succeed before dbt_test runs
