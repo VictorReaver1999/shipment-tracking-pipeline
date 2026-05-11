@@ -2,7 +2,7 @@ import json
 import random
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from kafka import KafkaProducer
 
 # --- Config ---
@@ -45,11 +45,25 @@ def introduce_errors(event):
 
     return event
 
-def generate_event(shipment_id, event_type, city, carrier):
+# Realistic time offsets per stage in hours
+# Simulates a real logistics timeline: order to delivery takes 2-3 days
+STAGE_OFFSETS_HOURS = {
+    "order_created":      0,
+    "picked_up":          random.randint(2, 8),
+    "in_transit":         random.randint(12, 36),
+    "out_for_delivery":   random.randint(48, 60),
+    "delivered":          random.randint(50, 72),
+    "failed":             random.randint(24, 72),
+}
+
+def generate_event(shipment_id, event_type, city, carrier, offset_hours=0):
+    # Base time 4 days ago so all events including delivered fall in the past
+    base_time = datetime.now(timezone.utc) - timedelta(hours=96)
+    event_time = base_time + timedelta(hours=offset_hours)
     event = {
         "shipment_id": shipment_id,
         "event_type": event_type,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": event_time.isoformat(),
         "location": city,
         "carrier": carrier,
         "region": CITY_REGION_MAP[city]
@@ -60,14 +74,29 @@ def simulate_shipment():
     shipment_id = str(uuid.uuid4())
     city = random.choice(list(CITY_REGION_MAP.keys()))
     carrier = random.choice(CARRIERS)
-    
+
+    # Generate realistic offsets once per shipment
+    picked_up_hours = random.randint(2, 8)
+    in_transit_hours = picked_up_hours + random.randint(10, 28)
+    out_hours = in_transit_hours + random.randint(12, 24)
+    delivered_hours = out_hours + random.randint(2, 12)
+
+    stage_offsets = {
+        "order_created": 0,
+        "picked_up": picked_up_hours,
+        "in_transit": in_transit_hours,
+        "out_for_delivery": out_hours,
+        "delivered": delivered_hours,
+        "failed": in_transit_hours + random.randint(2, 12),
+    }
+
     if random.random() < 0.1:
         stages = ["order_created", "picked_up", "in_transit", "failed"]
     else:
         stages = ["order_created", "picked_up", "in_transit", "out_for_delivery", "delivered"]
-    
+
     for event_type in stages:
-        event = generate_event(shipment_id, event_type, city, carrier)
+        event = generate_event(shipment_id, event_type, city, carrier, stage_offsets[event_type])
         yield event
         time.sleep(random.uniform(0.5, 2.0))
 
