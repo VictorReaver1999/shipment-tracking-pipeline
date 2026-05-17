@@ -1,5 +1,7 @@
 import json
 import os
+import uuid
+import boto3
 import psycopg2
 from datetime import datetime, timezone
 from dotenv import load_dotenv
@@ -8,6 +10,14 @@ from kafka import KafkaConsumer
 # Load variables from .env file into the environment
 # Must be called before any os.getenv() calls
 load_dotenv()
+
+# --- S3 config ---
+# Read bucket name from .env -- falls back to the known bucket name
+S3_BUCKET = os.getenv("S3_BUCKET", "shipment-tracking-events-dev-279091550367")
+S3_PREFIX = "raw-events"
+
+# Initialise S3 client using local AWS CLI credentials
+s3_client = boto3.client("s3", region_name="eu-central-1")
 
 # --- Config ---
 KAFKA_TOPIC = "shipment-events"
@@ -76,6 +86,31 @@ def insert_event(conn, event):
         """, event)
         conn.commit()
 
+def archive_to_s3(event):
+    """
+    Archive a single shipment event to S3 as a JSON file.
+    
+    Each event is stored as an individual JSON file under:
+    raw-events/YYYY-MM-DD/shipment_id/event_type_uuid.json
+    
+    This mirrors how real data lakes organise raw event archives --
+    partitioned by date for efficient querying with Athena.
+    """
+    try:
+        # Use event date for partitioning -- standard data lake pattern
+        event_date = event["timestamp"][:10]  # YYYY-MM-DD
+        key = f"{S3_PREFIX}/{event_date}/{event['shipment_id']}/{event['event_type']}_{uuid.uuid4()}.json"
+        
+        s3_client.put_object(
+            Bucket=S3_BUCKET,
+            Key=key,
+            Body=json.dumps(event),
+            ContentType="application/json"
+        )
+    except Exception as e:
+        # Never crash on S3 failure -- PostgreSQL is the primary store
+        print(f"S3 archive failed (non-fatal): {e}")
+
 def main():
     # Open a single persistent connection — stays open for the life of the consumer
     conn = get_connection()
@@ -105,9 +140,10 @@ def main():
         event = message.value
         try:
             insert_event(conn, event)
-            print(f"Inserted: {event}")
+            archive_to_s3(event)  # archive to S3 after successful PostgreSQL insert
+            print(f"Inserted + archived: {event['event_type']} | {event['shipment_id'][:8]}...")
         except Exception as e:
-            conn.rollback()  # reset the failed transaction
+            conn.rollback()
             print(f"Skipped bad event: {e} | Event: {event}")
 
 if __name__ == "__main__":
