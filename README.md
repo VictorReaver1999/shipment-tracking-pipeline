@@ -14,34 +14,7 @@ A Python producer generates synthetic shipment events and publishes them to Kafk
 
 ## Architecture
 
-```
-Python Producer
-      |
-      v
-    Kafka (KRaft mode)
-      |
-      v
-Python Consumer
-      |
-      v
-  PostgreSQL
-  (raw events)
-      |
-      v
-  dbt staging --> dbt marts
-                  - delivery times
-                  - delay rates
-                  - bottlenecks
-      |
-      v
-Streamlit Dashboard
-
-Airflow          -- orchestrates dbt runs hourly
-GitHub Actions   -- runs dbt tests on every push
-Terraform        -- provisions AWS S3 bucket
-```
-
----
+![Architecture Diagram](docs/architecture.svg)
 
 ## Screenshots
 
