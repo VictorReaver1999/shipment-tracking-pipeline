@@ -43,6 +43,20 @@ Terraform        -- provisions AWS S3 bucket
 
 ---
 
+## Screenshots
+
+### Streamlit Dashboard
+![Streamlit Dashboard](docs/Streamlit_Dashboard_Top.JPG)
+![Streamlit Dashboard](docs/Streamlit_Dashboard_Bottom.JPG)
+
+### Airflow DAG
+![Airflow DAG](docs/Airflow_DAG.JPG)
+
+### AWS S3 Data Lake
+![S3 Bucket](docs/S3_Bucket.JPG)
+
+---
+
 ## Tech stack
 
 | Layer | Tool |
